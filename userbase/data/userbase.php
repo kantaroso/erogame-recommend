@@ -79,6 +79,7 @@ function get_userreview_list(int $key = 0) {
 /*
 * curl でデータを取得する
 * データ量が多いので分割でダウンロードする（html形式）
+* 連投注意
 */
 function download_userreview() {
   $search_1 = '___FILE_NAME___';
