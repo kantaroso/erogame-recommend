@@ -11,8 +11,8 @@ if ($cmd === 'dl') {
   print('start make_userreview()'.PHP_EOL);
   make_userreview();
 } else if ($cmd === 'shape') {
-  print('start delete_unnecessary_data()'.PHP_EOL);
-  delete_unnecessary_data();
+  print('start dispersion_correction_data()'.PHP_EOL);
+  dispersion_correction_data();
 }
 
 // gamelist
@@ -130,15 +130,16 @@ function make_userreview() {
 }
 
 /*
-* レビュー数が少ないユーザーのデータを省く
+* ばらつき補正を行う
 * pythonでやるとめっちゃ時間かかるのでこっちでやる
 */
-function delete_unnecessary_data() {
+function dispersion_correction_data() {
 
   $min_score_count = 5;
+  $max_score_count = 600;
 
   $lines = file('userbase_all.csv');
-  $data_count_list = [];
+  $user_count_list = [];
   foreach($lines as $key => $line){
     if ($key === 0) {
       continue;
@@ -147,10 +148,10 @@ function delete_unnecessary_data() {
     if (empty($tmp[0])) {
       continue;
     }
-    if (empty($data_count_list[$tmp[0]])) {
-      $data_count_list[$tmp[0]] = 0;
+    if (empty($user_count_list[$tmp[0]])) {
+      $user_count_list[$tmp[0]] = 0;
     }
-    $data_count_list[$tmp[0]]++;
+    $user_count_list[$tmp[0]]++;
   }
 
   $fp = fopen('userbase.csv', 'w');
@@ -160,10 +161,13 @@ function delete_unnecessary_data() {
       continue;
     }
     $tmp = explode(',', $line);
-    if (empty($data_count_list[$tmp[0]])) {
+    if (empty($user_count_list[$tmp[0]])) {
       continue;
     }
-    if ($data_count_list[$tmp[0]] < $min_score_count) {
+    if ($user_count_list[$tmp[0]] < $min_score_count) {
+      continue;
+    }
+    if ($user_count_list[$tmp[0]] > $max_score_count) {
       continue;
     }
     fwrite($fp, $line);
