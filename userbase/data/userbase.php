@@ -13,6 +13,9 @@ if ($cmd === 'dl') {
 } else if ($cmd === 'shape') {
   print('start dispersion_correction_data()'.PHP_EOL);
   dispersion_correction_data();
+} else if ($cmd === 'reindex') {
+  print('start reindex()'.PHP_EOL);
+  reindex();
 }
 
 // gamelist
@@ -130,15 +133,81 @@ function make_userreview() {
 }
 
 /*
-* ばらつき補正を行う
-* pythonでやるとめっちゃ時間かかるのでこっちでやる
+* ばらつき、スコア補正を行う
+* collaboでやるとめっちゃ時間かかる & メモリ飛ぶとやり直しなのでこっちでやる
+* game -> userの順番でやるのでgameの評価数が最終的に6以下のゲームも対象になる可能性はあり
+* gameは全ユーザーで6件以下の評価のゲームは需要ないと判断する
 */
 function dispersion_correction_data() {
 
-  $min_score_count = 5;
-  $max_score_count = 600;
+  $min_user_score_count = 50;
+  $max_user_score_count = 51;
+  $min_game_score_count = 10;
+  // 0点は未評価扱いにするので1にする
+  $score_map = [
+    [
+      'max' => 100,
+      'min' => 81,
+      'score' => 5,
+    ],
+    [
+      'max' => 80,
+      'min' => 61,
+      'score' => 4,
+    ],
+    [
+      'max' => 60,
+      'min' => 41,
+      'score' => 3,
+    ],
+    [
+      'max' => 40,
+      'min' => 21,
+      'score' => 2,
+    ],
+    [
+      'max' => 20,
+      'min' => 0,
+      'score' => 1,
+    ],
+  ];
 
-  $lines = file('userbase_all.csv');
+  $tmp_lines = file('userbase_all.csv');
+
+  // ------------------
+  // gameデータの圧縮
+  $game_count_list = [];
+  $lines = [];
+  foreach($tmp_lines as $key => $line){
+    if ($key === 0) {
+      continue;
+    }
+    $tmp = explode(',', $line);
+    if (empty($tmp[1])) {
+      continue;
+    }
+    if (empty($game_count_list[$tmp[1]])) {
+      $game_count_list[$tmp[1]] = 0;
+    }
+    $game_count_list[$tmp[1]]++;
+  }
+  foreach($tmp_lines as $key => $line){
+    if ($key === 0) {
+      $lines[] = $line;
+      continue;
+    }
+    $tmp = explode(',', $line);
+    if (empty($game_count_list[$tmp[1]])) {
+      continue;
+    }
+    if ($game_count_list[$tmp[1]] < $min_game_score_count) {
+      continue;
+    }
+    $lines[] = $line;
+  }
+
+  // ------------------
+  // ユーザーデータの圧縮
   $user_count_list = [];
   foreach($lines as $key => $line){
     if ($key === 0) {
@@ -161,16 +230,79 @@ function dispersion_correction_data() {
       continue;
     }
     $tmp = explode(',', $line);
+    $tmp_res = $tmp;
     if (empty($user_count_list[$tmp[0]])) {
       continue;
     }
-    if ($user_count_list[$tmp[0]] < $min_score_count) {
+    if ($user_count_list[$tmp[0]] < $min_user_score_count) {
       continue;
     }
-    if ($user_count_list[$tmp[0]] > $max_score_count) {
+    if ($user_count_list[$tmp[0]] > $max_user_score_count) {
       continue;
     }
-    fwrite($fp, $line);
+    foreach ($score_map as $v) {
+      if ($tmp[2] >= $v['min'] && $tmp[2] <= $v['max']) {
+        $tmp_res[2] = $v['score'];
+        break;
+      }
+    }
+    fwrite($fp, implode(',', $tmp_res).PHP_EOL);
+  }
+  fclose($fp);
+}
+
+/*
+* データを0から始まるindexに振り直す
+*/
+function reindex(){
+
+  $file_name = 'userbase';
+
+  $user_id_map = [];
+  $game_id_map = [];
+
+  $lines = file($file_name.'.csv');
+  foreach($lines as $key => $line){
+      if ($key === 0) {
+          continue;
+      }
+      $tmp = explode(',', $line);
+      if (!in_array($tmp[0], $user_id_map, true)) {
+          $user_id_map[] = $tmp[0];
+      }
+      if (!in_array($tmp[1], $game_id_map, true)) {
+          $game_id_map[] = $tmp[1];
+      }
+  }
+  $user_id_map_r = array_flip($user_id_map);
+  $game_id_map_r = array_flip($game_id_map);
+
+  $fp = fopen($file_name.'_matrix.csv', 'w');
+  foreach($lines as $key => $line){
+      if ($key === 0) {
+          fwrite($fp, $line);
+          continue;
+      }
+      $tmp = explode(',', $line);
+      fwrite($fp, $user_id_map_r[$tmp[0]].','.$game_id_map_r[$tmp[1]].','.$tmp[2]);
+  }
+  fclose($fp);
+
+  $fp = fopen($file_name.'_user_map.csv', 'w');
+  foreach($user_id_map as $key => $value){
+      if ($key === 0) {
+          fwrite($fp, 'index,uid'."\n");
+      }
+      fwrite($fp, $key.','.$value."\n");
+  }
+  fclose($fp);
+
+  $fp = fopen($file_name.'_game_map.csv', 'w');
+  foreach($game_id_map as $key => $value){
+      if ($key === 0) {
+          fwrite($fp, 'index,game_id'."\n");
+      }
+      fwrite($fp, $key.','.$value."\n");
   }
   fclose($fp);
 }
