@@ -135,16 +135,67 @@ function make_userreview() {
 /*
 * ばらつき、スコア補正を行う
 * collaboでやるとめっちゃ時間かかる & メモリ飛ぶとやり直しなのでこっちでやる
-* game -> userの順番でやるのでgameの評価数が最終的に6以下のゲームも対象になる可能性はあり
-* gameは全ユーザーで6件以下の評価のゲームは需要ないと判断する
+* game -> userの順番でやる
 */
 function dispersion_correction_data() {
 
-  $min_user_score_count = 50;
-  $max_user_score_count = 51;
-  $min_game_score_count = 10;
+  $min_user_score_count = 30;
+  $max_user_score_count = 50;
+  $min_game_score_count = 15;
   // 0点は未評価扱いにするので1にする
   $score_map = [
+    /*
+    [
+      'max' => 100,
+      'min' => 91,
+      'score' => 10,
+    ],
+    [
+      'max' => 90,
+      'min' => 81,
+      'score' => 9,
+    ],
+    [
+      'max' => 80,
+      'min' => 71,
+      'score' => 8,
+    ],
+    [
+      'max' => 70,
+      'min' => 61,
+      'score' => 7,
+    ],
+    [
+      'max' => 60,
+      'min' => 51,
+      'score' => 6,
+    ],
+    [
+      'max' => 50,
+      'min' => 41,
+      'score' => 5,
+    ],
+    [
+      'max' => 40,
+      'min' => 31,
+      'score' => 4,
+    ],
+    [
+      'max' => 30,
+      'min' => 21,
+      'score' => 3,
+    ],
+    [
+      'max' => 20,
+      'min' => 11,
+      'score' => 2,
+    ],
+    [
+      'max' => 10,
+      'min' => 0,
+      'score' => 1,
+    ],
+    */
     [
       'max' => 100,
       'min' => 81,
