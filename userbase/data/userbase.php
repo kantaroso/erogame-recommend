@@ -11,8 +11,11 @@ if ($cmd === 'dl') {
   print('start make_userreview()'.PHP_EOL);
   make_userreview();
 } else if ($cmd === 'shape') {
-  print('start delete_unnecessary_data()'.PHP_EOL);
-  delete_unnecessary_data();
+  print('start dispersion_correction_data()'.PHP_EOL);
+  dispersion_correction_data();
+} else if ($cmd === 'reindex') {
+  print('start reindex()'.PHP_EOL);
+  reindex();
 }
 
 // gamelist
@@ -130,15 +133,133 @@ function make_userreview() {
 }
 
 /*
-* レビュー数が少ないユーザーのデータを省く
-* pythonでやるとめっちゃ時間かかるのでこっちでやる
+* ばらつき、スコア補正を行う
+* collaboでやるとめっちゃ時間かかる & メモリ飛ぶとやり直しなのでこっちでやる
+* game -> userの順番でやる
 */
-function delete_unnecessary_data() {
+function dispersion_correction_data() {
 
-  $min_score_count = 5;
+  $min_user_score_count = 30;
+  $max_user_score_count = 50;
+  $min_game_score_count = 15;
+  // 0点は未評価扱いにするので1にする
+  $score_map = [
+    /*
+    [
+      'max' => 100,
+      'min' => 91,
+      'score' => 10,
+    ],
+    [
+      'max' => 90,
+      'min' => 81,
+      'score' => 9,
+    ],
+    [
+      'max' => 80,
+      'min' => 71,
+      'score' => 8,
+    ],
+    [
+      'max' => 70,
+      'min' => 61,
+      'score' => 7,
+    ],
+    [
+      'max' => 60,
+      'min' => 51,
+      'score' => 6,
+    ],
+    [
+      'max' => 50,
+      'min' => 41,
+      'score' => 5,
+    ],
+    [
+      'max' => 40,
+      'min' => 31,
+      'score' => 4,
+    ],
+    [
+      'max' => 30,
+      'min' => 21,
+      'score' => 3,
+    ],
+    [
+      'max' => 20,
+      'min' => 11,
+      'score' => 2,
+    ],
+    [
+      'max' => 10,
+      'min' => 0,
+      'score' => 1,
+    ],
+    */
+    [
+      'max' => 100,
+      'min' => 81,
+      'score' => 5,
+    ],
+    [
+      'max' => 80,
+      'min' => 61,
+      'score' => 4,
+    ],
+    [
+      'max' => 60,
+      'min' => 41,
+      'score' => 3,
+    ],
+    [
+      'max' => 40,
+      'min' => 21,
+      'score' => 2,
+    ],
+    [
+      'max' => 20,
+      'min' => 0,
+      'score' => 1,
+    ],
+  ];
 
-  $lines = file('userbase_all.csv');
-  $data_count_list = [];
+  $tmp_lines = file('userbase_all.csv');
+
+  // ------------------
+  // gameデータの圧縮
+  $game_count_list = [];
+  $lines = [];
+  foreach($tmp_lines as $key => $line){
+    if ($key === 0) {
+      continue;
+    }
+    $tmp = explode(',', $line);
+    if (empty($tmp[1])) {
+      continue;
+    }
+    if (empty($game_count_list[$tmp[1]])) {
+      $game_count_list[$tmp[1]] = 0;
+    }
+    $game_count_list[$tmp[1]]++;
+  }
+  foreach($tmp_lines as $key => $line){
+    if ($key === 0) {
+      $lines[] = $line;
+      continue;
+    }
+    $tmp = explode(',', $line);
+    if (empty($game_count_list[$tmp[1]])) {
+      continue;
+    }
+    if ($game_count_list[$tmp[1]] < $min_game_score_count) {
+      continue;
+    }
+    $lines[] = $line;
+  }
+
+  // ------------------
+  // ユーザーデータの圧縮
+  $user_count_list = [];
   foreach($lines as $key => $line){
     if ($key === 0) {
       continue;
@@ -147,10 +268,10 @@ function delete_unnecessary_data() {
     if (empty($tmp[0])) {
       continue;
     }
-    if (empty($data_count_list[$tmp[0]])) {
-      $data_count_list[$tmp[0]] = 0;
+    if (empty($user_count_list[$tmp[0]])) {
+      $user_count_list[$tmp[0]] = 0;
     }
-    $data_count_list[$tmp[0]]++;
+    $user_count_list[$tmp[0]]++;
   }
 
   $fp = fopen('userbase.csv', 'w');
@@ -160,13 +281,79 @@ function delete_unnecessary_data() {
       continue;
     }
     $tmp = explode(',', $line);
-    if (empty($data_count_list[$tmp[0]])) {
+    $tmp_res = $tmp;
+    if (empty($user_count_list[$tmp[0]])) {
       continue;
     }
-    if ($data_count_list[$tmp[0]] < $min_score_count) {
+    if ($user_count_list[$tmp[0]] < $min_user_score_count) {
       continue;
     }
-    fwrite($fp, $line);
+    if ($user_count_list[$tmp[0]] > $max_user_score_count) {
+      continue;
+    }
+    foreach ($score_map as $v) {
+      if ($tmp[2] >= $v['min'] && $tmp[2] <= $v['max']) {
+        $tmp_res[2] = $v['score'];
+        break;
+      }
+    }
+    fwrite($fp, implode(',', $tmp_res).PHP_EOL);
+  }
+  fclose($fp);
+}
+
+/*
+* データを0から始まるindexに振り直す
+*/
+function reindex(){
+
+  $file_name = 'userbase';
+
+  $user_id_map = [];
+  $game_id_map = [];
+
+  $lines = file($file_name.'.csv');
+  foreach($lines as $key => $line){
+      if ($key === 0) {
+          continue;
+      }
+      $tmp = explode(',', $line);
+      if (!in_array($tmp[0], $user_id_map, true)) {
+          $user_id_map[] = $tmp[0];
+      }
+      if (!in_array($tmp[1], $game_id_map, true)) {
+          $game_id_map[] = $tmp[1];
+      }
+  }
+  $user_id_map_r = array_flip($user_id_map);
+  $game_id_map_r = array_flip($game_id_map);
+
+  $fp = fopen($file_name.'_matrix.csv', 'w');
+  foreach($lines as $key => $line){
+      if ($key === 0) {
+          fwrite($fp, $line);
+          continue;
+      }
+      $tmp = explode(',', $line);
+      fwrite($fp, $user_id_map_r[$tmp[0]].','.$game_id_map_r[$tmp[1]].','.$tmp[2]);
+  }
+  fclose($fp);
+
+  $fp = fopen($file_name.'_user_map.csv', 'w');
+  foreach($user_id_map as $key => $value){
+      if ($key === 0) {
+          fwrite($fp, 'index,uid'."\n");
+      }
+      fwrite($fp, $key.','.$value."\n");
+  }
+  fclose($fp);
+
+  $fp = fopen($file_name.'_game_map.csv', 'w');
+  foreach($game_id_map as $key => $value){
+      if ($key === 0) {
+          fwrite($fp, 'index,game_id'."\n");
+      }
+      fwrite($fp, $key.','.$value."\n");
   }
   fclose($fp);
 }
