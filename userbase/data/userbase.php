@@ -135,16 +135,17 @@ function make_userreview() {
 /*
 * ばらつき、スコア補正を行う
 * collaboでやるとめっちゃ時間かかる & メモリ飛ぶとやり直しなのでこっちでやる
-* game -> userの順番でやる
+* user -> game -> user の順番でやる
 */
 function dispersion_correction_data() {
 
-  $min_user_score_count = 30;
-  $max_user_score_count = 50;
-  $min_game_score_count = 15;
+  $min_user_score_count = 2;
+  $max_user_score_count = 1000;
+  $min_game_score_count = 2;
+  $min_user_score_countv2 = 2;
   // 0点は未評価扱いにするので1にする
   $score_map = [
-    /*
+
     [
       'max' => 100,
       'min' => 91,
@@ -195,7 +196,7 @@ function dispersion_correction_data() {
       'min' => 0,
       'score' => 1,
     ],
-    */
+    /*
     [
       'max' => 100,
       'min' => 81,
@@ -221,46 +222,15 @@ function dispersion_correction_data() {
       'min' => 0,
       'score' => 1,
     ],
+    */
   ];
 
   $tmp_lines = file('userbase_all.csv');
 
   // ------------------
-  // gameデータの圧縮
-  $game_count_list = [];
-  $lines = [];
-  foreach($tmp_lines as $key => $line){
-    if ($key === 0) {
-      continue;
-    }
-    $tmp = explode(',', $line);
-    if (empty($tmp[1])) {
-      continue;
-    }
-    if (empty($game_count_list[$tmp[1]])) {
-      $game_count_list[$tmp[1]] = 0;
-    }
-    $game_count_list[$tmp[1]]++;
-  }
-  foreach($tmp_lines as $key => $line){
-    if ($key === 0) {
-      $lines[] = $line;
-      continue;
-    }
-    $tmp = explode(',', $line);
-    if (empty($game_count_list[$tmp[1]])) {
-      continue;
-    }
-    if ($game_count_list[$tmp[1]] < $min_game_score_count) {
-      continue;
-    }
-    $lines[] = $line;
-  }
-
-  // ------------------
   // ユーザーデータの圧縮
   $user_count_list = [];
-  foreach($lines as $key => $line){
+  foreach($tmp_lines as $key => $line){
     if ($key === 0) {
       continue;
     }
@@ -273,15 +243,11 @@ function dispersion_correction_data() {
     }
     $user_count_list[$tmp[0]]++;
   }
-
-  $fp = fopen('userbase.csv', 'w');
-  foreach($lines as $key => $line){
+  foreach($tmp_lines as $key => $line){
     if ($key === 0) {
-      fwrite($fp, $line);
       continue;
     }
     $tmp = explode(',', $line);
-    $tmp_res = $tmp;
     if (empty($user_count_list[$tmp[0]])) {
       continue;
     }
@@ -289,6 +255,62 @@ function dispersion_correction_data() {
       continue;
     }
     if ($user_count_list[$tmp[0]] > $max_user_score_count) {
+      continue;
+    }
+    $lines[] = $line;
+  }
+
+  // ------------------
+  // gameデータの圧縮
+  $game_count_list = [];
+  $linesv2 = [];
+  foreach($lines as $key => $line){
+    $tmp = explode(',', $line);
+    if (empty($tmp[1])) {
+      continue;
+    }
+    if (empty($game_count_list[$tmp[1]])) {
+      $game_count_list[$tmp[1]] = 0;
+    }
+    $game_count_list[$tmp[1]]++;
+  }
+
+  foreach($lines as $key => $line){
+    $tmp = explode(',', $line);
+    $tmp_res = $tmp;
+    if (empty($game_count_list[$tmp[1]])) {
+      continue;
+    }
+    if ($game_count_list[$tmp[1]] < $min_game_score_count) {
+      continue;
+    }
+    $linesv2[] = $line;
+  }
+
+  // ------------------
+  // userデータの圧縮 2回目
+  $user_count_listv2 = [];
+  foreach($linesv2 as $key => $line){
+    $tmp = explode(',', $line);
+    if (empty($tmp[1])) {
+      continue;
+    }
+    if (empty($game_count_list[$tmp[1]])) {
+      $user_count_listv2[$tmp[1]] = 0;
+    }
+    $user_count_listv2[$tmp[1]]++;
+  }
+  $fp = fopen('userbase.csv', 'w');
+  foreach($linesv2 as $key => $line){
+    if ($key === 0) {
+      fwrite($fp, 'uid,game_id,score'.PHP_EOL);
+    }
+    $tmp = explode(',', $line);
+    $tmp_res = $tmp;
+    if (empty($user_count_listv2[$tmp[0]])) {
+      continue;
+    }
+    if ($user_count_listv2[$tmp[0]] < $min_user_score_countv2) {
       continue;
     }
     foreach ($score_map as $v) {
